@@ -1,6 +1,6 @@
 
 
-````markdown
+
 # JFrog Support API CLI Tool (jfat)
 
 `jfat` is an interactive Command Line Interface (CLI) tool for JFrog Support Engineers to quickly run and test Artifactory and Xray REST APIs.
