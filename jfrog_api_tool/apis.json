@@ -42,7 +42,26 @@
       "path_params": [],
       "body_input_mode": "wizard" ,
       "wizard_name": "force_reindex"
+    },
+    "Get Build Dependency Graph": {
+      "method": "POST",
+      "url": "/xray/api/v1/dependencyGraph/build",
+      "path_params": [],
+      "body_params": [
+        "build_name",
+        "build_number",
+        "build_repo",
+        "project"
+      ]
+    },
+    "Configure Workers Count": {
+      "method": "PUT",
+      "url": "/xray/api/v1/configuration/workersCount",
+      "path_params": [],
+      "body_input_mode": "wizard",
+      "wizard_name": "configure_workers_count"
     }
+
   }
   
 }
