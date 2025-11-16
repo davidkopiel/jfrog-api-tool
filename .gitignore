@@ -1,0 +1,6 @@
+venv/
+    .DS_Store
+    __pycache__/
+    */__pycache__/
+    jfrog_api_tool.egg-info/
+    build/

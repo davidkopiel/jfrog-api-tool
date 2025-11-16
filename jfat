@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# --- Find the real directory of this script, resolving symlinks ---
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" &> /dev/null && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" &> /dev/null && pwd )"
+# --- End of find script logic ---
+
+# Activate the venv relative to the *real* script directory
+source "$SCRIPT_DIR/venv/bin/activate"
+
+# --- THIS IS THE FIX ---
+# Change to the script's directory before running python,
+# so it can find the 'jfrog_api_tool' module.
+cd "$SCRIPT_DIR"
+
+# Run the Python module, passing all arguments
+python -m jfrog_api_tool.main "$@"
