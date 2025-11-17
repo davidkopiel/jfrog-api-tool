@@ -1,6 +1,7 @@
-# utils/api_runner.py
+# jfrog_api_tool/utils/api_runner.py
 
 import requests
+import questionary # <-- Added for the download prompt
 from requests.auth import HTTPBasicAuth
 from rich.console import Console
 from rich.pretty import pprint
@@ -26,11 +27,11 @@ def execute_api_call(auth_details: Dict[str, str],
         if param_key in params:
             full_url = full_url.replace(f"{{{param_key}}}", str(params[param_key]))
 
-    # --- 1.5. Build Query Params --- (NEW LOGIC)
+    # --- 1.5. Build Query Params ---
     query_data = {}
     query_param_keys = api_config.get("query_params", [])
     for key in query_param_keys:
-        if key in params and params[key]: # Only add if it exists and is not empty
+        if key in params and params[key]:
             query_data[key] = params[key]
 
     # --- 2. Build the JSON Body ---
@@ -61,8 +62,11 @@ def execute_api_call(auth_details: Dict[str, str],
         console.print(f"[cyan]Body:[/cyan]")
         pprint(json_body)
     
+    # --- NEW: Handle `produces` key from apis.json ---
+    produces_type = api_config.get("produces", "application/json")
+    
     headers = {
-        "Accept": "application/json"
+        "Accept": produces_type
     }
     if json_body:
         headers["Content-Type"] = "application/json"
@@ -74,23 +78,58 @@ def execute_api_call(auth_details: Dict[str, str],
             auth=auth,
             json=json_body,
             headers=headers,
-            params=query_data # NEW: Pass the query params to requests
+            params=query_data,
+            stream=True # Enable streaming for file downloads
         )
         
         response.raise_for_status() 
         
         console.print(f"\n✅ [bold green]Response (HTTP {response.status_code}):[/bold green]")
         
-        if response.status_code == 204 or not response.content:
-            console.print("[italic]Request successful (No Content 204).[/italic]")
-            return
-        
-        try:
-            data = response.json()
-            pprint(data)
-        except requests.exceptions.JSONDecodeError:
-            console.print(response.text)
+        # --- NEW: File Download Logic ---
+        content_type = response.headers.get("Content-Type", "")
+        if "application/octet-stream" in content_type or "application/zip" in content_type:
+            
+            # Try to get filename from headers
+            default_filename = "report.zip"
+            cd = response.headers.get("Content-Disposition")
+            if cd:
+                parts = cd.split("filename=")
+                if len(parts) > 1:
+                    default_filename = parts[1].strip("\"'")
 
+            console.print(f"[bold blue]File detected! (Content-Type: {content_type})[/bold blue]")
+            
+            save_path = questionary.text(
+                "Enter path to save file:",
+                default=default_filename
+            ).ask()
+
+            if not save_path:
+                console.print("[yellow]File download cancelled.[/yellow]")
+                return
+
+            try:
+                with open(save_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                console.print(f"[green]✅ File saved successfully to: [bold]{save_path}[/bold][/green]")
+            except Exception as e:
+                console.print(f"[bold red]Error saving file: {e}[/bold red]")
+
+        # --- Original JSON Logic ---
+        else:
+            if response.status_code == 204 or not response.content:
+                console.print("[italic]Request successful (No Content 204).[/italic]")
+                return
+            
+            try:
+                data = response.json()
+                pprint(data)
+            except requests.exceptions.JSONDecodeError:
+                console.print(response.text) # Fallback to text
+
+    # --- Error Handling (Unchanged) ---
     except requests.exceptions.HTTPError as e:
         console.print(f"\n❌ [bold red]HTTP Error ({e.response.status_code}):[/bold red]")
         try:

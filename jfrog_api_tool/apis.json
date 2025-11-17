@@ -60,6 +60,15 @@
       "path_params": [],
       "body_input_mode": "wizard",
       "wizard_name": "configure_workers_count"
+    },
+
+    "Export Component Details": {
+      "method": "POST",
+      "url": "/xray/api/v2/component/exportDetails",
+      "path_params": [],
+      "body_input_mode": "wizard",
+      "wizard_name": "export_component_details",
+      "produces": "application/octet-stream"
     }
 
   }

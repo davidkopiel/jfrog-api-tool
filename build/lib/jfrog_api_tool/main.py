@@ -4,12 +4,10 @@ import sys
 import os
 import json
 import importlib.resources
+import questionary
 from rich.console import Console
 from rich.panel import Panel
 from typing import Dict, Any
-
-# --- 1. Flag Handling Logic ---
-# Must run before importing other modules
 
 # Import the new config file
 from jfrog_api_tool import config 
@@ -37,8 +35,7 @@ if "--debug" in sys.argv or os.environ.get("JFAT_DEBUG") == "true":
     config.IS_DEBUG = True
     print("!!! DEBUG MODE ENABLED !!!")
 
-# --- 2. Standard Imports ---
-# (Now that flags are set, import the rest of the tool)
+# Standard Imports
 from jfrog_api_tool.utils import auth, api_runner
 
 # Initialize Rich console
@@ -49,7 +46,6 @@ def load_api_config() -> dict:
     Loads the API configuration file from within the package.
     """
     try:
-        # Reads 'apis.json' from the 'jfrog_api_tool' package
         file_content = importlib.resources.read_text('jfrog_api_tool', 'apis.json')
         return json.loads(file_content)
     except Exception as e:
@@ -314,6 +310,164 @@ def _run_force_reindex_wizard() -> Dict[str, Any]:
     
     return {"__json_body_from_file__": json_body}
 
+# --- WIZARD: Configure Workers Count ---
+def _run_configure_workers_wizard() -> Dict[str, Any]:
+    """
+    Runs an interactive wizard to build the workers count JSON body.
+    Uses defaults from the sample usage.
+    """
+    console.print("\n[bold]Starting 'Configure Workers Count' wizard...[/bold]")
+    console.print("[italic]Press Enter to accept the default value (e.g., [8]).[/italic]")
+
+    try:
+        json_body = {
+            "index": {
+                "new_content": int(questionary.text("Index [new_content]:", default="8").ask()),
+                "existing_content": int(questionary.text("Index [existing_content]:", default="4").ask())
+            },
+            "persist": {
+                "new_content": int(questionary.text("Persist [new_content]:", default="8").ask()),
+                "existing_content": int(questionary.text("Persist [existing_content]:", default="4").ask())
+            },
+            "analysis": {
+                "new_content": int(questionary.text("Analysis [new_content]:", default="8").ask()),
+                "existing_content": int(questionary.text("Analysis [existing_content]:", default="4").ask())
+            },
+            "policy_enforcer": {
+                "new_content": int(questionary.text("Policy Enforcer [new_content]:", default="8").ask()),
+                "existing_content": int(questionary.text("Policy Enforcer [existing_content]:", default="8").ask())
+            },
+            "sbom": {
+                "new_content": int(questionary.text("SBOM [new_content]:", default="0").ask()),
+                "existing_content": int(questionary.text("SBOM [existing_content]:", default="0").ask())
+            },
+            "usercatalog": {
+                "new_content": int(questionary.text("User Catalog [new_content]:", default="0").ask()),
+                "existing_content": int(questionary.text("User Catalog [existing_content]:", default="0").ask())
+            },
+            "sbomimpactanalysis": {
+                "new_content": int(questionary.text("SBOM Impact Analysis [new_content]:", default="0").ask()),
+                "existing_content": int(questionary.text("SBOM Impact Analysis [existing_content]:", default="0").ask())
+            },
+            "migrationsbom": {
+                "new_content": int(questionary.text("Migration SBOM [new_content]:", default="0").ask()),
+                "existing_content": int(questionary.text("Migration SBOM [existing_content]:", default="0").ask())
+            },
+            "impact_analysis": {
+                "new_content": int(questionary.text("Impact Analysis [new_content]:", default="8").ask())
+            },
+            "notification": {
+                "new_content": int(questionary.text("Notification [new_content]:", default="8").ask())
+            },
+            "panoramic": {
+                "new_content": int(questionary.text("Panoramic [new_content]:", default="0").ask())
+            }
+        }
+    except (ValueError, TypeError):
+        console.print("[bold red]Error: All values must be valid numbers.[/bold red]")
+        return None
+    except KeyboardInterrupt:
+        return None
+
+    # Return the body using the special key
+    return {"__json_body_from_file__": json_body}
+
+# --- NEW WIZARD: Export Component Details ---
+def _run_export_component_wizard() -> Dict[str, Any]:
+    """
+    Runs an interactive wizard to build the component export body.
+    """
+    console.print("\n[bold]Starting 'Export Component Details' wizard...[/bold]")
+    
+    try:
+        # --- 1. Core Component Details (Required) ---
+        console.print("[bold]Component Details (Required):[/bold]")
+        package_type = questionary.text("Package Type (e.g., docker, maven, build):").ask()
+        if not package_type: return None
+        
+        component_name = questionary.text("Component Name (e.g., image:tag):").ask()
+        if not component_name: return None
+        
+        path = questionary.text("Path (e.g., my-repo/image/tag/manifest.json):").ask()
+        if not path: return None
+
+        json_body = {
+            "package_type": package_type,
+            "component_name": component_name,
+            "path": path
+        }
+
+        # --- 2. Export Mode ---
+        export_mode = questionary.select(
+            "What do you want to export?",
+            choices=[
+                "Scan Results (PDF, CSV, JSON)",
+                "SPDX SBOM",
+                "CycloneDX SBOM"
+            ]
+        ).ask()
+        if not export_mode: return None
+
+        # --- 3. Mode-Specific Questions ---
+        
+        # Mode 1: Scan Results
+        if export_mode == "Scan Results (PDF, CSV, JSON)":
+            console.print("[bold]Scan Result Options:[/bold]")
+            
+            json_body["output_format"] = questionary.select(
+                "Select output format:",
+                choices=["pdf", "csv", "json", "json_full"],
+                default="pdf"
+            ).ask()
+            
+            # Ask for boolean flags
+            flags = questionary.checkbox(
+                "Select options to include:",
+                choices=[
+                    "violations",
+                    "include_ignored_violations",
+                    "license",
+                    "exclude_unknown",
+                    "vulnerabilities",
+                    "operational_risk",
+                    "secrets",
+                    "services",
+                    "applications",
+                    "iac"
+                ]
+            ).ask()
+            
+            for flag in flags:
+                json_body[flag] = True
+
+        # Mode 2: SPDX
+        elif export_mode == "SPDX SBOM":
+            console.print("[bold]SPDX Options:[/bold]")
+            json_body["spdx"] = True
+            json_body["spdx_format"] = questionary.select(
+                "Select SPDX format:",
+                choices=["json", "tag:value", "xlsx"],
+                default="json"
+            ).ask()
+
+        # Mode 3: CycloneDX
+        elif export_mode == "CycloneDX SBOM":
+            console.print("[bold]CycloneDX Options:[/bold]")
+            json_body["cyclonedx"] = True
+            json_body["cyclonedx_format"] = questionary.select(
+                "Select CycloneDX format:",
+                choices=["json", "xml"],
+                default="json"
+            ).ask()
+            json_body["vex"] = questionary.confirm("Include VEX?", default=False).ask()
+        
+    except KeyboardInterrupt:
+        return None
+    
+    # Return the body using the special key
+    return {"__json_body_from_file__": json_body}
+
+
 # --- Main Parameter Gathering Function ---
 def get_user_params(api_config: dict) -> dict:
     """
@@ -348,6 +502,14 @@ def get_user_params(api_config: dict) -> dict:
             wizard_params = _run_force_reindex_wizard()
         elif wizard_name == "create_policy_v2":
             wizard_params = _run_create_policy_wizard()
+        elif wizard_name == "configure_workers_count":
+            wizard_params = _run_configure_workers_wizard()
+        
+        # --- ADD THIS BLOCK ---
+        elif wizard_name == "export_component_details":
+            wizard_params = _run_export_component_wizard()
+        # ---------------------
+            
         else:
             console.print(f"[red]Error: Unknown wizard_name '{wizard_name}'[/red]")
             return None
