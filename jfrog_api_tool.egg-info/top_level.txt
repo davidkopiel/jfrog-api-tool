@@ -1,1 +1,0 @@
-jfrog_api_tool

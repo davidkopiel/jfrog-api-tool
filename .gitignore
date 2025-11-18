@@ -1,6 +1,22 @@
+# Python local environment
 venv/
-    .DS_Store
-    __pycache__/
-    */__pycache__/
-    jfrog_api_tool.egg-info/
-    build/
+
+# Python cache
+__pycache__/
+*/__pycache__/
+*.pyc
+
+# Build artifacts
+build/
+jfrog_api_tool.egg-info/
+
+# macOS system file
+.DS_Store
+
+# Test/temp files
+test_permissions.py
+
+# Reports & Logs
+*.zip
+*.pdf
+*.log

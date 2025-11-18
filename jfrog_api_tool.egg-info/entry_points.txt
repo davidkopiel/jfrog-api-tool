@@ -1,2 +1,0 @@
-[console_scripts]
-jfrog-api-tool = jfrog_api_tool.main:main

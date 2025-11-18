@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: jfrog-api-tool
-Version: 0.1.0
-Requires-Python: >=3.8
-Requires-Dist: requests
-Requires-Dist: questionary
-Requires-Dist: rich
