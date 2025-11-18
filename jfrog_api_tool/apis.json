@@ -69,8 +69,43 @@
       "body_input_mode": "wizard",
       "wizard_name": "export_component_details",
       "produces": "application/octet-stream"
-    }
+    },
+    "Garbage Collector": {
+    "GC Status": {
+      "method": "GET",
+      "url": "/xray/api/v1/gc/status",
+      "path_params": [],
+      "body_params": []
 
-  }
+  },
+  "Get GC Configuration": {
+      "method": "GET",
+      "url": "/xray/api/v1/configuration/gc",
+      "path_params": [],
+      "body_params": []
+
   
+},
+"Set GC Configuration": {
+      "method": "PUT",
+      "url": "/xray/api/v1/configuration/gc",
+      "path_params": [],
+      "body_input_mode": "wizard",
+      "wizard_name": "set_gc_config"
+    },
+ "Force GC to Run": {
+      "method": "POST",
+      "url": "/xray/api/v1/gc/start",
+      "path_params": [],
+      "body_input_mode": "wizard"
+      
+    },
+     "Abort GC": {
+      "method": "POST",
+      "url": "/xray/api/v1/gc/abort",
+          "path_params": [],
+      "body_params": []
+    }
+}
+}
 }

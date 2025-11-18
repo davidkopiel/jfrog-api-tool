@@ -12,7 +12,21 @@ from typing import Dict, Any
 # Import the new config file
 from jfrog_api_tool import config 
 
-# New help function
+# Import utilities
+from jfrog_api_tool.utils import auth, api_runner
+
+# Import all our wizards
+from jfrog_api_tool.wizards.policy_wizards import run_create_policy_wizard
+from jfrog_api_tool.wizards.reindex_wizard import run_force_reindex_wizard
+from jfrog_api_tool.wizards.gc_wizards import run_force_gc_start_wizard, run_set_gc_config_wizard
+from jfrog_api_tool.wizards.config_wizards import run_configure_workers_wizard
+from jfrog_api_tool.wizards.export_wizard import run_export_component_wizard
+
+# Initialize Rich console
+console = Console()
+
+
+# --- Help Function ---
 def _print_help():
     """Prints the help message."""
     console = Console()
@@ -25,21 +39,15 @@ def _print_help():
     console.print("\n[bold]Environment Variable:[/bold]")
     console.print("  JFAT_DEBUG=true    - Same as --debug (e.g., `JFAT_DEBUG=true jfat`)")
 
-# Check if user asked for help
+# --- Flag Handling ---
 if "--help" in sys.argv:
     _print_help()
     sys.exit(0)
 
-# Check if debug mode should be enabled
 if "--debug" in sys.argv or os.environ.get("JFAT_DEBUG") == "true":
     config.IS_DEBUG = True
     print("!!! DEBUG MODE ENABLED !!!")
 
-# Standard Imports
-from jfrog_api_tool.utils import auth, api_runner
-
-# Initialize Rich console
-console = Console()
 
 def load_api_config() -> dict:
     """
@@ -54,418 +62,7 @@ def load_api_config() -> dict:
         console.print(f"[italic]{e}[/italic]")
         sys.exit(1)
 
-
-# --- Policy Wizard Helper: Build Actions ---
-def _build_actions() -> Dict[str, Any]:
-    """
-    Interactive wizard to build the 'actions' object for a policy rule.
-    Returns None if user cancels.
-    """
-    actions = {}
-    console.print("\n[bold]Building Rule Actions:[/bold]")
-    
-    selected_actions = questionary.checkbox(
-        "Select actions to configure:",
-        choices=[
-            "fail_build",
-            "block_download",
-            "notify_deployer",
-            "notify_watch_recipients",
-            "mails",
-            "custom_severity"
-        ]
-    ).ask()
-
-    if selected_actions is None: return None # User cancelled
-
-    if "fail_build" in selected_actions:
-        actions["fail_build"] = questionary.confirm("Fail build?", default=True).ask()
-
-    if "block_download" in selected_actions:
-        actions["block_download"] = {
-            "active": questionary.confirm("Block download (active)?", default=True).ask(),
-            "unscanned": questionary.confirm("Block download (unscanned)?", default=True).ask()
-        }
-
-    if "notify_deployer" in selected_actions:
-        actions["notify_deployer"] = questionary.confirm("Notify deployer?", default=True).ask()
-    
-    if "notify_watch_recipients" in selected_actions:
-        actions["notify_watch_recipients"] = questionary.confirm("Notify watch recipients?", default=True).ask()
-
-    if "mails" in selected_actions:
-        mails_str = questionary.text("Enter emails (comma-separated):").ask()
-        if mails_str:
-            actions["mails"] = [email.strip() for email in mails_str.split(',')]
-
-    if "custom_severity" in selected_actions:
-        actions["custom_severity"] = questionary.select(
-            "Set custom severity:",
-            choices=["low", "medium", "high", "critical"]
-        ).ask()
-        
-    return actions
-
-# --- Policy Wizard Helper: Build Criteria ---
-def _build_criteria() -> Dict[str, Any]:
-    """
-    Interactive wizard to build the 'criteria' object for a policy rule.
-    Returns None if user cancels.
-    """
-    criteria = {}
-    console.print(f"\n[bold]Building Rule Criteria:[/bold]")
-    
-    criteria_choices = [
-        "min_severity",
-        "cvss_range",
-        "vulnerability_ids",
-        "fix_version_dependant",
-        "applicable_cves_only",
-        "malicious_package",
-        "package_name",
-        "package_type",
-        "package_versions",
-        "allowed_licenses",
-        "banned_licenses",
-        "allow_unknown",
-        "multi_license_permissive",
-        "op_risk_min_risk",
-    ]
-    
-    selected_criteria = questionary.checkbox(
-        "Select criteria to define (must select at least one):",
-        choices=criteria_choices
-    ).ask()
-
-    if selected_criteria is None: return None 
-    if not selected_criteria: 
-        return {} 
-
-    if "min_severity" in selected_criteria:
-        criteria["min_severity"] = questionary.select(
-            "Select minimum severity:",
-            choices=["low", "medium", "high", "critical", "all severities"]
-        ).ask()
-
-    if "cvss_range" in selected_criteria:
-        cvss_from = questionary.text("CVSS 'from' (0.0-10.0):").ask()
-        cvss_to = questionary.text("CVSS 'to' (0.0-10.0):").ask()
-        criteria["cvss_range"] = {"from": float(cvss_from), "to": float(cvss_to)}
-
-    if "vulnerability_ids" in selected_criteria:
-        cves_str = questionary.text("Enter CVEs/XRAY-IDs (comma-separated):").ask()
-        if cves_str:
-            criteria["vulnerability_ids"] = [cve.strip() for cve in cves_str.split(',')]
-    
-    if "fix_version_dependant" in selected_criteria:
-        criteria["fix_version_dependant"] = questionary.confirm("Only if fix is available?", default=True).ask()
-    
-    if "applicable_cves_only" in selected_criteria:
-        criteria["applicable_cves_only"] = questionary.confirm("Applicable CVEs only?", default=True).ask()
-
-    if "malicious_package" in selected_criteria:
-        criteria["malicious_package"] = questionary.confirm("Malicious package?", default=True).ask()
-
-    if "package_name" in selected_criteria:
-        criteria["package_name"] = questionary.text("Enter package name (e.g., 'log4j'):").ask()
-
-    if "package_type" in selected_criteria:
-        criteria["package_type"] = questionary.select(
-            "Select package type:",
-            choices=["maven", "docker", "npm", "pypi", "nuget", "generic", "golang"]
-        ).ask()
-        
-    if "package_versions" in selected_criteria:
-        vers_str = questionary.text("Enter package versions (e.g., '[1.1],(2.0,)'):").ask()
-        if vers_str:
-             criteria["package_versions"] = [v.strip() for v in vers_str.split(',')]
-
-    if "allowed_licenses" in selected_criteria:
-        lic_str = questionary.text("Enter allowed licenses (comma-separated):").ask()
-        if lic_str:
-            criteria["allowed_licenses"] = [lic.strip() for lic in lic_str.split(',')]
-    
-    if "banned_licenses" in selected_criteria:
-        lic_str = questionary.text("Enter banned licenses (comma-separated):").ask()
-        if lic_str:
-            criteria["banned_licenses"] = [lic.strip() for lic in lic_str.split(',')]
-    
-    if "allow_unknown" in selected_criteria:
-        criteria["allow_unknown"] = questionary.confirm("Allow unknown licenses?", default=True).ask()
-        
-    if "multi_license_permissive" in selected_criteria:
-        criteria["multi_license_permissive"] = questionary.confirm("Multi-license permissive?", default=True).ask()
-
-    if "op_risk_min_risk" in selected_criteria:
-        criteria["op_risk_min_risk"] = questionary.select(
-            "Select minimum operational risk:",
-            choices=["low", "medium", "high"]
-        ).ask()
-        
-    return criteria
-
-# --- Policy Wizard Helper: Build a single Rule ---
-def _build_policy_rule() -> Dict[str, Any]:
-    """
-    Runs an interactive wizard to build a single Policy Rule.
-    """
-    console.print("\n--- [bold green]Adding a New Rule[/bold green] ---")
-    rule_name = questionary.text("Rule name:").ask()
-    if rule_name is None: return None
-
-    rule_priority = questionary.text("Rule priority (e.g., 1):", default="1").ask()
-    if rule_priority is None: return None
-
-    criteria = None
-    while not criteria: 
-        console.print("[yellow]A rule must have at least one criterion.[/yellow]")
-        criteria = _build_criteria() 
-        
-        if criteria is None: 
-             return None 
-        
-        if not criteria: 
-            console.print("[bold red]Error: No criteria selected. Please define at least one.[/bold red]")
-
-    actions = _build_actions()
-    if actions is None: 
-        return None
-    
-    return {
-        "name": rule_name,
-        "priority": int(rule_priority),
-        "criteria": criteria,
-        "actions": actions
-    }
-
-# --- WIZARD: Create Policy V2 ---
-def _run_create_policy_wizard() -> Dict[str, Any]:
-    """
-    Runs the full interactive wizard for creating a V2 Policy.
-    """
-    console.print("\n[bold]Starting 'Create Policy (v2)' wizard...[/bold]")
-    policy_body = {}
-    rules = []
-    
-    policy_name = questionary.text("Policy name:").ask()
-    if policy_name is None: return None
-    
-    policy_type = questionary.select(
-        "Policy type:",
-        choices=["security", "license", "operational_risk"]
-    ).ask()
-    if policy_type is None: return None
-    
-    policy_desc = questionary.text("Policy description (optional):").ask()
-    
-    policy_body["name"] = policy_name
-    policy_body["type"] = policy_type
-    if policy_desc:
-        policy_body["description"] = policy_desc
-
-    while True:
-        new_rule = _build_policy_rule() 
-        if new_rule:
-            rules.append(new_rule)
-        else:
-            if not rules:
-                console.print("[yellow]Policy creation cancelled.[/yellow]")
-                return None
-            else:
-                break
-
-        add_another = questionary.confirm("Add another rule?").ask()
-        if not add_another:
-            break
-    
-    if not rules:
-        console.print("[bold red]Error: A policy must have at least one rule.[/bold red]")
-        return None
-
-    policy_body["rules"] = rules
-    
-    return {"__json_body_from_file__": policy_body}
-
-# --- WIZARD: Force Reindex ---
-def _run_force_reindex_wizard() -> Dict[str, Any]:
-    """
-    Runs an interactive wizard to build the complex JSON body for Force Reindex.
-    """
-    console.print("\n[bold]Starting 'Force Reindex' wizard...[/bold]")
-    reindex_type = questionary.select(
-        "What do you want to reindex?",
-        choices=["An Artifact", "A Build"]
-    ).ask()
-    if reindex_type is None: return None
-    json_body = {}
-    if reindex_type == "An Artifact":
-        repo = questionary.text("Enter repository:").ask()
-        path = questionary.text("Enter path:").ask()
-        if repo is None or path is None: return None
-        json_body = {"artifacts": [{"repository": repo, "path": path}]}
-    elif reindex_type == "A Build":
-        name = questionary.text("Enter build name:").ask()
-        number = questionary.text("Enter build number:").ask()
-        if name is None or number is None: return None
-        json_body = {"builds": [{"name": name, "number": number}]}
-    
-    return {"__json_body_from_file__": json_body}
-
-# --- WIZARD: Configure Workers Count ---
-def _run_configure_workers_wizard() -> Dict[str, Any]:
-    """
-    Runs an interactive wizard to build the workers count JSON body.
-    Uses defaults from the sample usage.
-    """
-    console.print("\n[bold]Starting 'Configure Workers Count' wizard...[/bold]")
-    console.print("[italic]Press Enter to accept the default value (e.g., [8]).[/italic]")
-
-    try:
-        json_body = {
-            "index": {
-                "new_content": int(questionary.text("Index [new_content]:", default="8").ask()),
-                "existing_content": int(questionary.text("Index [existing_content]:", default="4").ask())
-            },
-            "persist": {
-                "new_content": int(questionary.text("Persist [new_content]:", default="8").ask()),
-                "existing_content": int(questionary.text("Persist [existing_content]:", default="4").ask())
-            },
-            "analysis": {
-                "new_content": int(questionary.text("Analysis [new_content]:", default="8").ask()),
-                "existing_content": int(questionary.text("Analysis [existing_content]:", default="4").ask())
-            },
-            "policy_enforcer": {
-                "new_content": int(questionary.text("Policy Enforcer [new_content]:", default="8").ask()),
-                "existing_content": int(questionary.text("Policy Enforcer [existing_content]:", default="8").ask())
-            },
-            "sbom": {
-                "new_content": int(questionary.text("SBOM [new_content]:", default="0").ask()),
-                "existing_content": int(questionary.text("SBOM [existing_content]:", default="0").ask())
-            },
-            "usercatalog": {
-                "new_content": int(questionary.text("User Catalog [new_content]:", default="0").ask()),
-                "existing_content": int(questionary.text("User Catalog [existing_content]:", default="0").ask())
-            },
-            "sbomimpactanalysis": {
-                "new_content": int(questionary.text("SBOM Impact Analysis [new_content]:", default="0").ask()),
-                "existing_content": int(questionary.text("SBOM Impact Analysis [existing_content]:", default="0").ask())
-            },
-            "migrationsbom": {
-                "new_content": int(questionary.text("Migration SBOM [new_content]:", default="0").ask()),
-                "existing_content": int(questionary.text("Migration SBOM [existing_content]:", default="0").ask())
-            },
-            "impact_analysis": {
-                "new_content": int(questionary.text("Impact Analysis [new_content]:", default="8").ask())
-            },
-            "notification": {
-                "new_content": int(questionary.text("Notification [new_content]:", default="8").ask())
-            },
-            "panoramic": {
-                "new_content": int(questionary.text("Panoramic [new_content]:", default="0").ask())
-            }
-        }
-    except (ValueError, TypeError):
-        console.print("[bold red]Error: All values must be valid numbers.[/bold red]")
-        return None
-    except KeyboardInterrupt:
-        return None
-
-    # Return the body using the special key
-    return {"__json_body_from_file__": json_body}
-
-# --- WIZARD: Export Component Details (UPDATED) ---
-def _run_export_component_wizard() -> Dict[str, Any]:
-    """
-    Runs an interactive wizard to build the component export body.
-    """
-    console.print("\n[bold]Starting 'Export Component Details' wizard...[/bold]")
-    
-    try:
-        # --- 1. Core Component Details (Required) ---
-        console.print("[bold]Component Details (Required):[/bold]")
-        package_type = questionary.text("Package Type (e.g., docker, maven, build):").ask()
-        if not package_type: return None
-        
-        component_name = questionary.text("Component Name (e.g., image:tag):").ask()
-        if not component_name: return None
-        
-        path = questionary.text("Path (e.g., my-repo/image/tag/manifest.json):").ask()
-        if not path: return None
-
-        json_body = {
-            "package_type": package_type,
-            "component_name": component_name,
-            "path": path
-        }
-
-        # --- 2. Export Mode ---
-        export_mode = questionary.select(
-            "What do you want to export?",
-            choices=[
-                "Scan Results (PDF, CSV, JSON)",
-                "SPDX SBOM",
-                "CycloneDX SBOM"
-            ]
-        ).ask()
-        if not export_mode: return None
-
-        # --- 3. Mode-Specific Questions ---
-        
-        # Mode 1: Scan Results
-        if export_mode == "Scan Results (PDF, CSV, JSON)":
-            console.print("[bold]Scan Result Options:[/bold]")
-            
-            json_body["output_format"] = questionary.select(
-                "Select output format:",
-                choices=["pdf", "csv", "json", "json_full"],
-                default="pdf"
-            ).ask()
-            
-            # --- THIS IS THE UPDATED LOGIC ---
-            # Ask for each boolean flag individually with smart defaults
-            console.print("[italic]Configure optional flags (Press Enter to accept default):[/italic]")
-            json_body["violations"] = questionary.confirm("Include violations?", default=True).ask()
-            json_body["include_ignored_violations"] = questionary.confirm("Include ignored violations?", default=True).ask()
-            json_body["license"] = questionary.confirm("Include license?", default=True).ask()
-            json_body["exclude_unknown"] = questionary.confirm("Exclude unknown licenses?", default=False).ask()
-            json_body["operational_risk"] = questionary.confirm("Include operational risk?", default=True).ask()
-            # 'security' is not a valid flag, but 'vulnerabilities' is (based on docs)
-            json_body["vulnerabilities"] = questionary.confirm("Include vulnerabilities (security)?", default=True).ask() 
-            json_body["secrets"] = questionary.confirm("Include secrets?", default=True).ask()
-            json_body["services"] = questionary.confirm("Include services?", default=True).ask()
-            json_body["applications"] = questionary.confirm("Include applications?", default=True).ask()
-            json_body["iac"] = questionary.confirm("Include IaC?", default=False).ask()
-            # ---------------------------------
-
-        # Mode 2: SPDX
-        elif export_mode == "SPDX SBOM":
-            console.print("[bold]SPDX Options:[/bold]")
-            json_body["spdx"] = True
-            json_body["spdx_format"] = questionary.select(
-                "Select SPDX format:",
-                choices=["json", "tag:value", "xlsx"],
-                default="json"
-            ).ask()
-
-        # Mode 3: CycloneDX
-        elif export_mode == "CycloneDX SBOM":
-            console.print("[bold]CycloneDX Options:[/bold]")
-            json_body["cyclonedx"] = True
-            json_body["cyclonedx_format"] = questionary.select(
-                "Select CycloneDX format:",
-                choices=["json", "xml"],
-                default="json"
-            ).ask()
-            json_body["vex"] = questionary.confirm("Include VEX?", default=False).ask()
-        
-    except KeyboardInterrupt:
-        return None
-    
-    # Return the body using the special key
-    return {"__json_body_from_file__": json_body}
-
-
-# --- Main Parameter Gathering Function ---
+# --- Main Parameter Gathering Function (The "Router") ---
 def get_user_params(api_config: dict) -> dict:
     """
     Prompts the user for required path, query, and body parameters.
@@ -495,15 +92,19 @@ def get_user_params(api_config: dict) -> dict:
     if body_input_mode == "wizard":
         wizard_params = None
         
+        # Route to the correct wizard based on its name
         if wizard_name == "force_reindex":
-            wizard_params = _run_force_reindex_wizard()
+            wizard_params = run_force_reindex_wizard()
         elif wizard_name == "create_policy_v2":
-            wizard_params = _run_create_policy_wizard()
+            wizard_params = run_create_policy_wizard()
         elif wizard_name == "configure_workers_count":
-            wizard_params = _run_configure_workers_wizard()
+            wizard_params = run_configure_workers_wizard()
         elif wizard_name == "export_component_details":
-            wizard_params = _run_export_component_wizard()
-            
+            wizard_params = run_export_component_wizard()
+        elif wizard_name == "set_gc_config":
+            wizard_params = run_set_gc_config_wizard()    
+        elif wizard_name == "force_gc_start":
+            wizard_params = run_force_gc_start_wizard()
         else:
             console.print(f"[red]Error: Unknown wizard_name '{wizard_name}'[/red]")
             return None
@@ -523,6 +124,7 @@ def get_user_params(api_config: dict) -> dict:
             return None
             
     else:
+        # Simple key-value "Type 1" APIs
         body_params = api_config.get("body_params", [])
         if body_params:
             console.print("\n[bold]Please provide request body parameters:[/bold]")
@@ -549,35 +151,58 @@ def main():
     
     try:
         while True:
+            # --- System Selection ---
             selected_system = questionary.select(
                 "Select system:",
-                choices=list(api_config_data.keys())
+                choices=list(api_config_data.keys()) + [questionary.Separator(), "Exit"]
             ).ask()
-            if selected_system is None: break
+            if selected_system is None or selected_system == "Exit": break
 
             system_apis = api_config_data[selected_system]
             
-            selected_api_name = questionary.select(
-                f"Select API from {selected_system}:",
-                choices=list(system_apis.keys())
+            # --- API / Category Selection ---
+            selected_key = questionary.select(
+                f"Select API or Category from {selected_system}:",
+                choices=list(system_apis.keys()) + [questionary.Separator(), "Back"]
             ).ask()
-            if selected_api_name is None: break
-                
-            selected_api_config = system_apis[selected_api_name]
             
-            user_params = get_user_params(selected_api_config)
-            if user_params is None: break
+            if selected_key is None or selected_key == "Back":
+                continue # Go back to system selection
+                
+            selected_config = system_apis[selected_key]
+            
+            # --- NEW: Sub-menu logic ---
+            # Check if the selected item is a sub-category (doesn't have "method")
+            if "method" not in selected_config:
+                sub_menu = selected_config
+                console.print(f"[bold]Selected category: {selected_key}[/bold]")
+                
+                selected_api_name = questionary.select(
+                    f"Select API from {selected_key}:",
+                    choices=list(sub_menu.keys()) + [questionary.Separator(), "Back"]
+                ).ask()
+                
+                if selected_api_name is None or selected_api_name == "Back":
+                    continue # Go back to system selection
+                
+                selected_config = sub_menu[selected_api_name]
+            # --- End of sub-menu logic ---
+
+            # At this point, selected_config is a final API endpoint
+            user_params = get_user_params(selected_config)
+            if user_params is None:
+                continue # User cancelled parameter input, go back to system menu
 
             api_runner.execute_api_call(
                 auth_details=credentials,
-                api_config=selected_api_config,
+                api_config=selected_config,
                 params=user_params
             )
             
             console.print("\n" + "="*50 + "\n")
             run_another = questionary.confirm("Do you want to run another API call?").ask()
             if not run_another:
-                break
+                break # Exit the main while loop
 
     except KeyboardInterrupt:
         pass
