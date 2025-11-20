@@ -97,8 +97,8 @@
       "method": "POST",
       "url": "/xray/api/v1/gc/start",
       "path_params": [],
-      "body_input_mode": "wizard"
-      
+      "body_input_mode": "wizard",
+      "wizard_name": ""
     },
      "Abort GC": {
       "method": "POST",
