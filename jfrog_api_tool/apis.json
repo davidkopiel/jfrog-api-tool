@@ -17,6 +17,15 @@
       "url": "/artifactory/api/system/ping",
       "path_params": [],
       "body_params": []
+    },
+
+    "Run AQL Query": {
+      "method": "POST",
+      "url": "/artifactory/api/search/aql",
+      "path_params": [],
+      "body_input_mode": "wizard",
+      "wizard_name": "run_aql",
+      "content_type": "text/plain"
     }
   },
   "Xray": {
@@ -98,7 +107,7 @@
       "url": "/xray/api/v1/gc/start",
       "path_params": [],
       "body_input_mode": "wizard",
-      "wizard_name": ""
+      "wizard_name": "force_gc_start"
     },
      "Abort GC": {
       "method": "POST",
@@ -107,5 +116,6 @@
       "body_params": []
     }
 }
+
 }
 }

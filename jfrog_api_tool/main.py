@@ -21,7 +21,7 @@ from jfrog_api_tool.wizards.reindex_wizard import run_force_reindex_wizard
 from jfrog_api_tool.wizards.gc_wizards import run_force_gc_start_wizard, run_set_gc_config_wizard
 from jfrog_api_tool.wizards.config_wizards import run_configure_workers_wizard
 from jfrog_api_tool.wizards.export_wizard import run_export_component_wizard
-
+from jfrog_api_tool.wizards.aql_wizard import run_aql_wizard
 # Initialize Rich console
 console = Console()
 
@@ -105,6 +105,8 @@ def get_user_params(api_config: dict) -> dict:
             wizard_params = run_set_gc_config_wizard()    
         elif wizard_name == "force_gc_start":
             wizard_params = run_force_gc_start_wizard()
+        elif wizard_name == "run_aql":
+            wizard_params = run_aql_wizard()
         else:
             console.print(f"[red]Error: Unknown wizard_name '{wizard_name}'[/red]")
             return None

@@ -9,7 +9,8 @@ requires-python = ">=3.8"
 dependencies = [
     "requests",
     "questionary",
-    "rich"]
+    "rich",
+    "cryptography"]
 
 [project.scripts]
 

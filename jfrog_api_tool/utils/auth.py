@@ -3,10 +3,12 @@
 import questionary
 import configparser
 import sys
+import os
 from pathlib import Path
 from rich.console import Console
+from cryptography.fernet import Fernet 
 
-# Import the config file that holds the debug state
+# Import config for debug flag
 from jfrog_api_tool import config
 
 console = Console()
@@ -14,228 +16,166 @@ console = Console()
 # --- Settings ---
 CONFIG_DIR = Path.home() / ".config" / "jfrog-api-tool"
 CONFIG_FILE = CONFIG_DIR / "config.ini"
+KEY_FILE = CONFIG_DIR / ".secret.key"  # 
 
-# --- Initial Debug Print ---
-if config.IS_DEBUG:
-    print(f"DEBUG: Script started.")
-    print(f"DEBUG: Config Directory path set to: {CONFIG_DIR}")
-    print(f"DEBUG: Config File path set to: {CONFIG_FILE}")
+# --- Encryption Helpers ---
+def _get_cipher_suite():
+    """
+    Loads or creates the encryption key and returns a Fernet cipher suite.
+    """
+    # 1. Ensure directory exists
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 2. Check if key exists, otherwise generate it
+    if not KEY_FILE.exists():
+        if config.IS_DEBUG: print("DEBUG: Generating new encryption key...")
+        key = Fernet.generate_key()
+        with open(KEY_FILE, "wb") as key_file:
+            key_file.write(key)
+    else:
+        if config.IS_DEBUG: print("DEBUG: Loading existing encryption key...")
+        with open(KEY_FILE, "rb") as key_file:
+            key = key_file.read()
+            
+    return Fernet(key)
+
+def _encrypt_token(token: str) -> str:
+    """Encrypts the token."""
+    if not token: return ""
+    cipher = _get_cipher_suite()
+    return cipher.encrypt(token.encode()).decode()
+
+def _decrypt_token(encrypted_token: str) -> str:
+    """Decrypts the token."""
+    if not encrypted_token: return ""
+    cipher = _get_cipher_suite()
+    try:
+        return cipher.decrypt(encrypted_token.encode()).decode()
+    except Exception as e:
+        if config.IS_DEBUG: print(f"DEBUG: Decryption failed: {e}")
+        return None
+
+# --- Config Logic ---
 
 def _init_config():
-    """
-    Ensures the config directory and file exist.
-    """
-    if config.IS_DEBUG: print("DEBUG: --- Entering _init_config() ---")
+    """Ensures config dir and file exist."""
     try:
-        if config.IS_DEBUG: print(f"DEBUG: Checking/Creating directory: {CONFIG_DIR}")
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        if config.IS_DEBUG: print("DEBUG: Directory check/creation successful.")
-        
-        if config.IS_DEBUG: print(f"DEBUG: Checking if file exists: {CONFIG_FILE}")
         if not CONFIG_FILE.is_file():
-            if config.IS_DEBUG: print("DEBUG: File does not exist. Attempting to create (touch) it...")
             CONFIG_FILE.touch()
-            if config.IS_DEBUG: print("DEBUG: File created.")
-        else:
-            if config.IS_DEBUG: print("DEBUG: File already exists.")
-            
     except Exception as e:
-        if config.IS_DEBUG:
-            print(f"DEBUG: !!! CRITICAL ERROR in _init_config !!!")
-            print(f"DEBUG: Error details: {e}")
-        console.print(f"[bold red]Error:[/bold red] Could not create config directory or file.")
-        console.print(f"[italic]{e}[/italic]")
+        console.print(f"[bold red]Error:[/bold red] Could not create config directory.")
         sys.exit(1)
-    if config.IS_DEBUG: print("DEBUG: --- Exiting _init_config() ---")
-
 
 def _load_contexts() -> configparser.ConfigParser:
-    """
-    Loads all saved contexts from the config.ini file.
-    """
-    if config.IS_DEBUG: print("DEBUG: --- Entering _load_contexts() ---")
-    _init_config()  # This will run the init function
-    
+    """Loads contexts from config.ini."""
+    _init_config()
     parser = configparser.ConfigParser()
     try:
-        if config.IS_DEBUG: print(f"DEBUG: Reading config file: {CONFIG_FILE}")
         parser.read(CONFIG_FILE)
-        if config.IS_DEBUG: print("DEBUG: Config file read successful.")
-    except Exception as e:
-        if config.IS_DEBUG:
-            print(f"DEBUG: !!! CRITICAL ERROR in _load_contexts !!!")
-            print(f"DEBUG: Error details: {e}")
-        console.print(f"[bold red]Error:[/bold red] Could not read config file.")
-        console.print(f"[italic]{e}[/italic]")
+    except Exception:
         sys.exit(1)
-        
-    if config.IS_DEBUG: print(f"DEBUG: Sections found in config file: {parser.sections()}")
-    if config.IS_DEBUG: print("DEBUG: --- Exiting _load_contexts() ---")
     return parser
 
 def _save_context(profile_name: str, base_url: str, username: str, token: str):
-    """
-    Saves a new context (including token) to the config.ini file.
-    """
-    if config.IS_DEBUG: print("DEBUG: --- Entering _save_context() ---")
+    """Saves context with ENCRYPTED token."""
     parser = _load_contexts()
     
     if profile_name not in parser:
-        if config.IS_DEBUG: print(f"DEBUG: Adding new section to config: [{profile_name}]")
         parser.add_section(profile_name)
     
-    if config.IS_DEBUG: print("DEBUG: Setting base_url, username, and token in config.")
     parser.set(profile_name, "base_url", base_url)
     parser.set(profile_name, "username", username)
-    parser.set(profile_name, "token", token) 
+    
+    # --- ENCRYPTION HAPPENS HERE ---
+    encrypted_token = _encrypt_token(token)
+    parser.set(profile_name, "token", encrypted_token) 
+    # -------------------------------
     
     try:
-        if config.IS_DEBUG: print(f"DEBUG: Writing changes to config file: {CONFIG_FILE}")
         with open(CONFIG_FILE, 'w') as f:
             parser.write(f)
-        if config.IS_DEBUG: print("DEBUG: Write successful.")
     except Exception as e:
-        if config.IS_DEBUG:
-            print(f"DEBUG: !!! CRITICAL ERROR in _save_context !!!")
-            print(f"DEBUG: Error details: {e}")
         console.print(f"[bold red]Error:[/bold red] Failed to write to config file.")
-        console.print(f"[italic]{e}[/italic]")
         return
 
     console.print(f"\n[green]✅ Context '[bold]{profile_name}[/bold]' saved successfully.[/green]")
-    console.print(f"[bold yellow]⚠️ Security Warning: Token was saved in plain text to {CONFIG_FILE}[/bold yellow]")
-    if config.IS_DEBUG: print("DEBUG: --- Exiting _save_context() ---")
-        
+    console.print(f"[dim]Token stored securely (encrypted locally).[/dim]")
 
 def _prompt_for_new_context() -> dict:
-    """
-    Runs the prompt to get new credentials from the user.
-    """
-    if config.IS_DEBUG: print("DEBUG: --- Entering _prompt_for_new_context() ---")
+    """Prompts user for new credentials."""
     try:
-        if config.IS_DEBUG: print("DEBUG: Asking for Base URL...")
-        base_url = questionary.text(
-            "Enter the Base URL (e.g. https://mycompany.jfrog.io):",
-            validate=lambda text: True if text.startswith("http") else "URL must start with 'http://' or 'https://'"
-        ).ask()
-        if base_url is None: 
-            if config.IS_DEBUG: print("DEBUG: User cancelled at Base URL.")
-            return None
+        base_url = questionary.text("Enter Base URL:").ask()
+        if not base_url: return None
 
-        if config.IS_DEBUG: print("DEBUG: Asking for Username...")
-        username = questionary.text(
-            "Username:",
-            validate=lambda text: True if len(text) > 0 else "Username cannot be empty"
-        ).ask()
-        if username is None: 
-            if config.IS_DEBUG: print("DEBUG: User cancelled at Username.")
-            return None
+        username = questionary.text("Username:").ask()
+        if not username: return None
 
-        if config.IS_DEBUG: print("DEBUG: Asking for Token/Password...")
-        token = questionary.password(
-            "Password or API Token (input is hidden):",
-            validate=lambda text: True if len(text) > 0 else "Password/Token cannot be empty"
-        ).ask()
-        if token is None: 
-            if config.IS_DEBUG: print("DEBUG: User cancelled at Password.")
-            return None
+        token = questionary.password("Password / API Token:").ask()
+        if not token: return None
 
-        # --- Save Context ---
-        if config.IS_DEBUG: print("DEBUG: Asking 'Do you want to save'...")
-        save = questionary.confirm("Do you want to save these credentials?").ask()
+        save = questionary.confirm("Save these credentials?").ask()
         if save:
-            if config.IS_DEBUG: print("DEBUG: User chose to save.")
-            profile_name = questionary.text(
-                "Enter a profile name to save these credentials (e.g., 'my-work', 'customer-x'):"
-            ).ask()
+            profile_name = questionary.text("Profile Name (e.g. 'work'):").ask()
             if profile_name:
-                if config.IS_DEBUG: print(f"DEBUG: User provided profile name '{profile_name}'. Calling _save_context().")
                 _save_context(profile_name, base_url, username, token)
-            else:
-                if config.IS_DEBUG: print("DEBUG: User did not provide profile name. Not saving.")
-                console.print("[yellow]No profile name given. Credentials were not saved.[/yellow]")
-        else:
-            if config.IS_DEBUG: print("DEBUG: User chose not to save.")
         
-        if base_url.endswith("/"):
-            base_url = base_url[:-1]
-            
-        if config.IS_DEBUG: print("DEBUG: --- Exiting _prompt_for_new_context() ---")
+        if base_url.endswith("/"): base_url = base_url[:-1]
         return {"base_url": base_url, "username": username, "token": token}
 
     except KeyboardInterrupt:
-        if config.IS_DEBUG: print("DEBUG: KeyboardInterrupt caught in _prompt_for_new_context.")
         return None
 
 def get_credentials() -> dict:
-    """
-    Main function to get credentials.
-    Loads existing contexts or prompts for new ones.
-    """
-    if config.IS_DEBUG: print("DEBUG: --- Entering get_credentials() ---")
+    """Main entry to get credentials."""
     console.print("\n🔐 [bold cyan]JFrog Platform Authentication[/bold cyan]")
     
     parser = _load_contexts()
     contexts = parser.sections()
-    if config.IS_DEBUG: print(f"DEBUG: Contexts found: {contexts}")
     
     if not contexts:
-        if config.IS_DEBUG: print("DEBUG: No contexts found. Calling _prompt_for_new_context().")
         console.print("[yellow]No saved credentials found. Please add a new context.[/yellow]")
         return _prompt_for_new_context()
     
-    # --- Build Choices Menu ---
-    if config.IS_DEBUG: print("DEBUG: Building context selection menu.")
     choices = []
     for context_name in contexts:
         url = parser.get(context_name, 'base_url', fallback='N/A')
         user = parser.get(context_name, 'username', fallback='N/A')
-        choices.append(
-            questionary.Choice(
-                title=f"[{context_name}] {user} @ {url}",
-                value=context_name
-            )
-        )
+        choices.append(questionary.Choice(title=f"[{context_name}] {user} @ {url}", value=context_name))
     
     choices.append(questionary.Separator())
     choices.append(questionary.Choice(title="[ Add New Credentials... ]", value="--new--"))
     choices.append(questionary.Choice(title="[ Exit ]", value="--exit--"))
     
     try:
-        if config.IS_DEBUG: print("DEBUG: Asking user to select context.")
-        selected_context = questionary.select(
-            "Select credentials to use:",
-            choices=choices
-        ).ask()
+        selected_context = questionary.select("Select credentials:", choices=choices).ask()
 
-        if selected_context is None or selected_context == "--exit--":
-            if config.IS_DEBUG: print("DEBUG: User selected Exit or cancelled.")
-            return None 
+        if selected_context is None or selected_context == "--exit--": return None 
+        if selected_context == "--new--": return _prompt_for_new_context()
         
-        if selected_context == "--new--":
-            if config.IS_DEBUG: print("DEBUG: User selected Add New.")
-            return _prompt_for_new_context()
-        
-        if config.IS_DEBUG: print(f"DEBUG: User selected context '{selected_context}'.")
         console.print(f"[green]Using saved context '[bold]{selected_context}[/bold]'...[/green]")
         
+        # Retrieve encrypted token
+        encrypted_token = parser.get(selected_context, 'token', fallback=None)
+        
+        # --- DECRYPTION HAPPENS HERE ---
+        decrypted_token = _decrypt_token(encrypted_token)
+        
+        if not decrypted_token:
+            console.print(f"[bold red]Error:[/bold red] Could not decrypt token for '{selected_context}'.")
+            console.print("The key file might be missing or the token is corrupted.")
+            console.print("Please re-add this profile.")
+            return None
+        # -------------------------------
+
         creds = {
             "base_url": parser.get(selected_context, 'base_url'),
             "username": parser.get(selected_context, 'username'),
-            "token": parser.get(selected_context, 'token', fallback=None)
+            "token": decrypted_token
         }
         
-        if not creds["token"]:
-            if config.IS_DEBUG: print(f"DEBUG: !!! ERROR: Token for '{selected_context}' not found in config file.")
-            console.print(f"[bold red]Error:[/bold red] Token for '{selected_context}' not found in config file.")
-            return None 
-        
-        if creds["base_url"].endswith("/"):
-            creds["base_url"] = creds["base_url"][:-1]
-            
-        if config.IS_DEBUG: print("DEBUG: --- Exiting get_credentials() ---")
+        if creds["base_url"].endswith("/"): creds["base_url"] = creds["base_url"][:-1]
         return creds
 
     except KeyboardInterrupt:
-        if config.IS_DEBUG: print("DEBUG: KeyboardInterrupt caught in get_credentials.")
         return None
