@@ -17,4 +17,5 @@ dependencies = [
 jfrog-api-tool = "jfrog_api_tool.main:main"
 
 [tool.setuptools]
+packages = ["jfrog_api_tool"]
 package-data = {"jfrog_api_tool" = ["apis.json"]}

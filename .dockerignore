@@ -1,0 +1,56 @@
+# Exclude Hakaton directory (not part of the package)
+Hakaton/
+
+# Python cache
+__pycache__/
+*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+jfrog_api_tool/venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+jfrog_api_tool.egg-info/
+
+# Test files
+test_*.py
+*.log
+
+# Documentation and reports
+*.pdf
+*.zip
+*.md
+README.md
+
+# Docker files (don't copy into itself)
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Chart files
+jfat-chart/
+
+# Export directories
+Docker_*/
+
