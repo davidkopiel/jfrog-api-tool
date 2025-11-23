@@ -10,7 +10,7 @@ __pycache__/
 build/
 jfrog_api_tool.egg-info/
 jfat-chart/
-Hakaton/*
+Hakaton
 # macOS system file
 .DS_Store
 
