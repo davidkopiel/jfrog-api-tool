@@ -36,20 +36,18 @@
       "query_params": ["projectKey"],
       "body_input_mode": "wizard",
       "wizard_name": "create_policy_v2"
-    
     },
     "System Ping": {
       "method": "GET",
       "url": "/xray/api/v1/system/ping",
       "path_params": [],
       "body_params": []
-
     },
     "Force Reindex": {
       "method": "POST",
       "url": "/xray/api/v1/forceReindex",
       "path_params": [],
-      "body_input_mode": "wizard" ,
+      "body_input_mode": "wizard",
       "wizard_name": "force_reindex"
     },
     "Get Build Dependency Graph": {
@@ -70,7 +68,31 @@
       "body_input_mode": "wizard",
       "wizard_name": "configure_workers_count"
     },
-
+    "Ignore Rules": {
+      "Get Ignore Rule Details": {
+        "method": "GET",
+        "url": "/xray/api/v1/ignore_rules/{id}",
+        "path_params": ["id"],
+        "query_params": ["projectKey"]
+      },
+      "Create Ignore Rule": {
+        "method": "POST",
+        "url": "/xray/api/v1/ignore_rules",
+        "path_params": [],
+        "body_input_mode": "wizard",
+        "wizard_name": "create_ignore_rule"
+      }
+    },
+    "Watches": {
+      "Apply Watch on Existing Content": {
+        "method": "POST",
+        "url": "/xray/api/v1/applyWatch",
+        "path_params": [],
+        "query_params": ["projectKey"],
+        "body_input_mode": "wizard",
+        "wizard_name": "apply_watch_history"
+      }
+    },
     "Export Component Details": {
       "method": "POST",
       "url": "/xray/api/v2/component/exportDetails",
@@ -80,42 +102,38 @@
       "produces": "application/octet-stream"
     },
     "Garbage Collector": {
-    "GC Status": {
-      "method": "GET",
-      "url": "/xray/api/v1/gc/status",
-      "path_params": [],
-      "body_params": []
-
-  },
-  "Get GC Configuration": {
-      "method": "GET",
-      "url": "/xray/api/v1/configuration/gc",
-      "path_params": [],
-      "body_params": []
-
-  
-},
-"Set GC Configuration": {
-      "method": "PUT",
-      "url": "/xray/api/v1/configuration/gc",
-      "path_params": [],
-      "body_input_mode": "wizard",
-      "wizard_name": "set_gc_config"
-    },
- "Force GC to Run": {
-      "method": "POST",
-      "url": "/xray/api/v1/gc/start",
-      "path_params": [],
-      "body_input_mode": "wizard",
-      "wizard_name": "force_gc_start"
-    },
-     "Abort GC": {
-      "method": "POST",
-      "url": "/xray/api/v1/gc/abort",
-          "path_params": [],
-      "body_params": []
+      "GC Status": {
+        "method": "GET",
+        "url": "/xray/api/v1/gc/status",
+        "path_params": [],
+        "body_params": []
+      },
+      "Get GC Configuration": {
+        "method": "GET",
+        "url": "/xray/api/v1/configuration/gc",
+        "path_params": [],
+        "body_params": []
+      },
+      "Set GC Configuration": {
+        "method": "PUT",
+        "url": "/xray/api/v1/configuration/gc",
+        "path_params": [],
+        "body_input_mode": "wizard",
+        "wizard_name": "set_gc_config"
+      },
+      "Force GC to Run": {
+        "method": "POST",
+        "url": "/xray/api/v1/gc/start",
+        "path_params": [],
+        "body_input_mode": "wizard",
+        "wizard_name": "force_gc_start"
+      },
+      "Abort GC": {
+        "method": "POST",
+        "url": "/xray/api/v1/gc/abort",
+        "path_params": [],
+        "body_params": []
+      }
     }
-}
-
-}
+  }
 }

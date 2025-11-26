@@ -9,10 +9,10 @@ from rich.console import Console
 from rich.panel import Panel
 from typing import Dict, Any
 
-# Import the new config file
+
 from jfrog_api_tool import config 
 
-# Import utilities
+
 from jfrog_api_tool.utils import auth, api_runner
 
 # Import all our wizards
@@ -22,6 +22,8 @@ from jfrog_api_tool.wizards.gc_wizards import run_force_gc_start_wizard, run_set
 from jfrog_api_tool.wizards.config_wizards import run_configure_workers_wizard
 from jfrog_api_tool.wizards.export_wizard import run_export_component_wizard
 from jfrog_api_tool.wizards.aql_wizard import run_aql_wizard
+from jfrog_api_tool.wizards.ignore_rules_wizard import run_create_ignore_rule_wizard
+from jfrog_api_tool.wizards.watch_wizard import run_apply_watch_history_wizard
 # Initialize Rich console
 console = Console()
 
@@ -107,6 +109,10 @@ def get_user_params(api_config: dict) -> dict:
             wizard_params = run_force_gc_start_wizard()
         elif wizard_name == "run_aql":
             wizard_params = run_aql_wizard()
+        elif wizard_name == "create_ignore_rule":
+            wizard_params = run_create_ignore_rule_wizard()    
+        elif wizard_name == "apply_watch_history":
+            wizard_params = run_apply_watch_history_wizard()
         else:
             console.print(f"[red]Error: Unknown wizard_name '{wizard_name}'[/red]")
             return None
