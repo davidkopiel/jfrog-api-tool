@@ -36,7 +36,7 @@ jobs:
           #
           # The command that installs the project dependencies (e.g "npm i", "nuget restore" or "dotnet restore")
           # JF_INSTALL_DEPS_CMD: ""
-
+          JFROG_CLI_LOG_LEVEL: DEBUG  
           # [Mandatory]
           # JFrog platform URL
           JF_URL: ${{ secrets.JF_URL }}
