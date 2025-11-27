@@ -1,0 +1,12 @@
+version: "1.0.0"
+name: jfat
+description: JFrog Support API Tool (Wizard & AQL)
+maintainer: David Kopiel
+usage: jf jfat
+commands:
+  - name: run
+    alias: r
+    description: Opens the interactive wizard
+    executable: jfat
+    arguments: []
+    flags: []

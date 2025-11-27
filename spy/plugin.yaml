@@ -1,0 +1,12 @@
+version: 1
+name: spy
+description: Spies on environment variables
+maintainer: You
+usage: jf spy
+commands:
+  - name: run
+    alias: r
+    description: Show env vars
+    executable: python3  # אנחנו מריצים את פייתון ישירות
+    arguments:
+      - spy.py           # ומעבירים לו את הסקריפט שלנו
