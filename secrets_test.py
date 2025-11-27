@@ -1,2 +1,2 @@
 aws_key = "AKIA5QY71234567890AB"
-aws_secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+aws_secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEEY"
