@@ -1,4 +1,4 @@
 requests
 questionary
 rich
-pyinstaller
+cryptography
